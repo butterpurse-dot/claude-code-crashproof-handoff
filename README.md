@@ -14,7 +14,14 @@ The skill is one `SKILL.md`; the resume step is one bash script. Each agent gets
 | Gemini CLI | extension | hook | 0.67: extension validates and links, skill listed. Hook command covered by tests, not run in a live session |
 | Codex CLI | `install.sh codex` | hook (you approve it once) | 0.158: skill discovered. Hook not run in a live session |
 | opencode | `install.sh opencode` | instruction in `AGENTS.md` | Live on 2.2 with a DeepSeek model, using project-level files: it ran the resume script, read the pointers, and listed the skill |
+| Kilo Code (VS Code and CLI) | `install.sh kilo` | instruction in `~/.config/kilo/AGENTS.md` | 7.8: skill listed. Instruction not run in a live session |
+| GitHub Copilot Chat in VS Code | `install.sh generic` | instruction in `~/.copilot/instructions/*.instructions.md` | Paths confirmed in VS Code 1.145; not run live. Needs agent mode to run the script |
+| Continue (VS Code) | `install.sh generic` | rule in `~/.continue/rules/` | Not tested |
 | Anything else | `install.sh generic` | instruction in `AGENTS.md` | Not tested |
+
+The Claude Code extension for VS Code uses the same install as Claude Code.
+
+**Models.** Nothing here is tied to a model. It has been run on Claude models and on DeepSeek (through opencode). In Copilot Chat or Continue, a bring-your-own-key model such as DeepSeek gets the same skill and instructions as any other.
 
 Where an agent has no session-start hook, the resume step is an instruction the model has to follow, which is weaker than a hook.
 
@@ -92,14 +99,14 @@ git clone https://github.com/butterpurse-dot/claude-code-crashproof-handoff.git
 bash claude-code-crashproof-handoff/install.sh codex
 ```
 
-Replace `codex` with `opencode`, `generic`, or `claude` (a hand install for Claude Code, for when you want to edit the skill).
+Replace `codex` with `opencode`, `kilo`, `generic`, or `claude` (a hand install for Claude Code, for when you want to edit the skill).
 
 The installer copies two files (backing up any it would overwrite), creates the memory dir, and prints the one thing left to add:
 
 - **claude, codex:** a `SessionStart` hook entry for `settings.json` or `~/.codex/hooks.json`.
-- **opencode, generic:** four lines for your `AGENTS.md` that tell the agent to run the resume script at the start of each session.
+- **opencode, kilo, generic:** a few lines for your `AGENTS.md` (or Copilot instructions file, or Continue rule) that tell the agent to run the resume script at the start of each session.
 
-It never edits a settings or instructions file for you. `codex` and `generic` put the skill in `~/.agents/skills`, the shared folder that Codex, opencode and Gemini CLI all read.
+It never edits a settings or instructions file for you. `codex` and `generic` put the skill in `~/.agents/skills`, the shared folder that Codex, opencode, Gemini CLI and VS Code Copilot Chat all read.
 
 ## Use
 
@@ -132,7 +139,7 @@ The skill is meant to be edited. Three places:
 
 - **Heartbeats and the gate depend on the model following the skill.** The hook is plain code with tests; the skill is instructions.
 - **Redaction is an instruction, not a scanner.** Check a handoff before you paste it anywhere public.
-- **Tested:** the hook (`bash tests/test.sh`, 37 checks), the installer for all four targets, the example tables with the skill's `INSERT`s on PostgreSQL 16, and each agent as listed under "Works with".
+- **Tested:** the hook (`bash tests/test.sh`, 37 checks), the installer for all five targets, the example tables with the skill's `INSERT`s on PostgreSQL 16, and each agent as listed under "Works with".
 - **Written for Claude Code first.** A few lines in the skill describe Claude behaviour (`MEMORY.md` auto-loading and its 200-line limit). They are harmless elsewhere.
 - **Weaker models follow the heartbeat and the gate less reliably.** Not measured.
 - **Mileage:** the pointer chain, hook, rules files and state-store routing have months of use. The heartbeat, crash detection, reconciliation gate, redaction rule, tagging checks, plugin packaging and the non-Claude installs are new.
@@ -147,7 +154,7 @@ hooks/hooks.json                 registers the hook for the Claude plugin and th
 gemini-extension.json            Gemini CLI extension manifest
 examples/session-wrap.conf       force-load config for rules files
 examples/state-store.sql         example Postgres state store
-install.sh                       copies skill and hook for claude, codex, opencode or generic
+install.sh                       copies skill and hook for claude, codex, opencode, kilo or generic
 tests/test.sh                    hook tests
 demo.sh                          prints what the hook shows after a clean wrap and after a killed session
 ```

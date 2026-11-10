@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copies the skill and the resume script into an agent's config dir.
-#   bash install.sh [claude|codex|opencode|generic]     (default: claude)
+#   bash install.sh [claude|codex|opencode|kilo|generic]     (default: claude)
 # codex and generic put the skill in ~/.agents/skills, the shared location that
 # Codex, opencode and other SKILL.md-aware agents read.
 # It never edits a settings, hooks or AGENTS.md file: it prints what to add.
@@ -13,8 +13,9 @@ case "$TARGET" in
   codex)    DIR="${CODEX_HOME:-$HOME/.codex}";          SKILL="$HOME/.agents/skills/session-wrap/SKILL.md" ;;
   opencode) DIR="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
             SKILL="$DIR/skills/session-wrap/SKILL.md" ;;
+  kilo)     DIR="${XDG_CONFIG_HOME:-$HOME/.config}/kilo"; SKILL="$HOME/.kilo/skills/session-wrap/SKILL.md" ;;
   generic)  DIR="$HOME/.session-wrap";                  SKILL="$HOME/.agents/skills/session-wrap/SKILL.md" ;;
-  *) echo "usage: bash install.sh [claude|codex|opencode|generic]" >&2; exit 2 ;;
+  *) echo "usage: bash install.sh [claude|codex|opencode|kilo|generic]" >&2; exit 2 ;;
 esac
 HOOK="$DIR/hooks/session-resume.sh"
 [ "$TARGET" = generic ] && HOOK="$DIR/session-resume.sh"
