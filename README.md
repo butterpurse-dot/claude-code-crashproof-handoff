@@ -47,6 +47,19 @@ These are in `SKILL.md` because each one cost a session:
 
 ## Install
 
+### As a plugin
+
+Inside Claude Code:
+
+```
+/plugin marketplace add butterpurse-dot/claude-code-crashproof-handoff
+/plugin install crashproof-handoff@crashproof-handoff
+```
+
+The plugin registers the hook for you; there is no settings edit. The skill is then named `/crashproof-handoff:session-wrap`.
+
+### By hand
+
 ```bash
 git clone https://github.com/butterpurse-dot/claude-code-crashproof-handoff.git
 ```
@@ -63,11 +76,11 @@ The installer copies two files into `~/.claude` (backing up any it would overwri
 ]
 ```
 
-It does not edit your settings for you.
+It does not edit your settings for you. Use one install method, not both, or the hook runs twice.
 
 ## Use
 
-- **End of session:** `/session-wrap`, or "wrap up", "save context", "prepare handoff".
+- **End of session:** `/session-wrap` (plugin install: `/crashproof-handoff:session-wrap`), or "wrap up", "save context", "prepare handoff".
 - **During the session:** the skill tells Claude when to write a heartbeat. Say "checkpoint" to force one.
 - **Next session:** nothing. The hook prints the pointers.
 
@@ -81,13 +94,13 @@ After each completed sub-task and before any risky step, write a heartbeat as de
 
 The skill is meant to be edited. Three places:
 
-1. **§2 routes.** Replace the three placeholder routes with one per project you own: where its state lives, how to connect, and its gotchas. `examples/state-store.sql` has working tables for the Postgres route.
+1. **§2 routes.** (Hand install only: a plugin update overwrites its copy of the skill, so install by hand if you plan to edit it.) Replace the three placeholder routes with one per project you own: where its state lives, how to connect, and its gotchas. `examples/state-store.sql` has working tables for the Postgres route.
 2. **Rules files.** Copy `examples/session-wrap.conf` into the memory dir and list the projects whose rules must always load.
 3. **Resume prompt.** Put your own standing instructions in the last line of the template.
 
 ## How it is laid out
 
-- Memory dir: `~/.claude/projects/<your-home-as-a-slug>/memory/`. Print it with `bash ~/.claude/hooks/session-resume.sh --dir`; override with `SESSION_WRAP_MEM`.
+- Memory dir: `~/.claude/projects/<your-home-as-a-slug>/memory/`. Print it with `echo "${SESSION_WRAP_MEM:-$HOME/.claude/projects/$(printf %s "$HOME" | tr / -)/memory}"`; override with `SESSION_WRAP_MEM`.
 - `MEMORY.md` there is the index. `project_<proj>_handoff_<YYYYMMDD>.md` are the handoffs. `<proj>_rules.md` and `<proj>_now.md` are the always-loaded files.
 - One memory dir for all projects is deliberate: the pointers reach you whichever directory you start in.
 - The hook needs bash, git, grep and sed. No jq, no Python, no network.
@@ -96,14 +109,16 @@ The skill is meant to be edited. Three places:
 
 - **Heartbeats and the gate depend on the model following the skill.** The hook is plain code with tests; the skill is instructions.
 - **Redaction is an instruction, not a scanner.** Check a handoff before you paste it anywhere public.
-- **Tested:** the hook (`bash tests/test.sh`, 26 checks), the installer, and the example tables with the skill's `INSERT`s on PostgreSQL 16.
-- **Mileage:** the pointer chain, hook, rules files and state-store routing have months of use. The heartbeat, crash detection, reconciliation gate, redaction rule and tagging checks are new in this release.
+- **Tested:** the hook (`bash tests/test.sh`, 30 checks), the installer, the example tables with the skill's `INSERT`s on PostgreSQL 16, and the plugin loaded from a local folder on Claude Code 2.1 (manifest validates, hook fires, skill is listed).
+- **Mileage:** the pointer chain, hook, rules files and state-store routing have months of use. The heartbeat, crash detection, reconciliation gate, redaction rule, tagging checks and plugin packaging are new.
 
 ## Files
 
 ```
 skills/session-wrap/SKILL.md     the skill
 hooks/session-resume.sh          the SessionStart hook
+hooks/hooks.json                 registers the hook when installed as a plugin
+.claude-plugin/                  plugin and marketplace manifests
 examples/session-wrap.conf       force-load config for rules files
 examples/state-store.sql         example Postgres state store
 install.sh                       copies skill and hook into ~/.claude

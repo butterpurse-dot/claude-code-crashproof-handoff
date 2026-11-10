@@ -1,0 +1,14 @@
+{
+  "name": "crashproof-handoff",
+  "owner": {
+    "name": "butterpurse-dot"
+  },
+  "plugins": [
+    {
+      "name": "crashproof-handoff",
+      "description": "Session-wrap skill and SessionStart resume hook: handoff chain, heartbeats, crash detection.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

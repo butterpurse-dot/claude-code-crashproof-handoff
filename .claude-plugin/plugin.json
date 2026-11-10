@@ -1,0 +1,13 @@
+{
+  "name": "crashproof-handoff",
+  "version": "1.1.0",
+  "description": "Session-wrap skill and SessionStart hook for people running several long-lived projects: dated handoff chain, one read-first pointer per project, mid-session heartbeats, and a warning when a session ended without wrapping.",
+  "author": {
+    "name": "butterpurse-dot",
+    "url": "https://github.com/butterpurse-dot"
+  },
+  "homepage": "https://github.com/butterpurse-dot/claude-code-crashproof-handoff",
+  "repository": "https://github.com/butterpurse-dot/claude-code-crashproof-handoff",
+  "license": "MIT",
+  "keywords": ["session-handoff", "context-management", "hooks", "skills"]
+}

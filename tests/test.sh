@@ -86,5 +86,16 @@ else
   echo "SKIP: git worktree test (git unavailable)"
 fi
 
+# 10. plugin packaging: the hooks.json command runs the hook from CLAUDE_PLUGIN_ROOT
+ROOT="$(dirname "$(dirname "$HOOK")")"
+cmd="$(sed -n 's/.*"command": "\(.*\)",$/\1/p' "$ROOT/hooks/hooks.json" | sed 's/\\"/"/g')"
+check "plugin hook command found" "$cmd" 'CLAUDE_PLUGIN_ROOT' 1
+check "plugin hook command runs" "$(CLAUDE_PROJECT_DIR="$T/elsewhere" CLAUDE_PLUGIN_ROOT="$ROOT" bash -c "$cmd")" "alpha state" 1
+
+# 11. the memory-dir one-liner in the skill agrees with the hook
+check "skill names the hook's memory dir" "$(grep -c 'tr / -)/memory}' "$ROOT/skills/session-wrap/SKILL.md")" "1" 1
+skilldir="$(SESSION_WRAP_MEM= HOME=/home/u bash -c 'echo "${SESSION_WRAP_MEM:-$HOME/.claude/projects/$(printf %s "$HOME" | tr / -)/memory}"')"
+check "one-liner equals --dir" "$(SESSION_WRAP_MEM= HOME=/home/u bash "$HOOK" --dir)" "$skilldir" 1
+
 echo "passed $pass, failed $fail"
 [ "$fail" = 0 ]

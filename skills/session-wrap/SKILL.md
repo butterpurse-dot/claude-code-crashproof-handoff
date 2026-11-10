@@ -5,7 +5,7 @@ description: Project-aware end-of-session closeout — refresh the read-first ha
 
 # Session Wrap (project-aware closeout)
 
-Two parts: §1 is universal; §2 routes by project (state tables are per-project — never write one project's tables for another). §0 = mid-session heartbeat (below). `<MEM>` = the memory dir printed by `bash ~/.claude/hooks/session-resume.sh --dir`.
+Two parts: §1 is universal; §2 routes by project (state tables are per-project — never write one project's tables for another). §0 = mid-session heartbeat (below). `<MEM>` = the memory dir printed by `echo "${SESSION_WRAP_MEM:-$HOME/.claude/projects/$(printf %s "$HOME" | tr / -)/memory}"`.
 
 **Redact before ANY save** (heartbeat, handoff memory, rules/now files, DB rows, resume prompt): strip API keys, tokens, passwords, private keys, account numbers and balances, personal data, anything identifying live accounts. Write `<REDACTED — see vault>` or paraphrase ("live balance verified, not recorded here"). Naming WHERE the real value lives is fine; the value is not. Same pattern as the guardrail paraphrase rule in §2 — keep both.
 
@@ -16,7 +16,7 @@ After each completed sub-task, and BEFORE any long/risky step (big refactor, dep
 
 ## 1. Handoff memory — ALWAYS (any project)
 Write/update `<MEM>/project_<proj>_handoff_<YYYYMMDD>.md`: verified state (key SHAs, what landed, OPEN decisions, ordered next-work, mandates). In `<MEM>/MEMORY.md`, tag its index line `★READ FIRST FOR <PROJECT> (current)★`; mark the prior one "(superseded)". Old handoffs stay on disk: the superseded chain is the project's history.
-- The SessionStart hook `~/.claude/hooks/session-resume.sh` is PROJECT-AGNOSTIC: it injects EVERY line matching `READ FIRST FOR <ANY-PROJECT>` that is not marked superseded → tagging the line IS the resume guarantee for ANY project (no per-project hook needed). Keep the hook even though MEMORY.md is auto-loaded: it adds the "read the handoff BEFORE working" instruction, works from any directory, and survives MEMORY.md growing past the 200-line load limit. It also warns when a project has two live pointers or a pointer to a missing file — fix those at wrap.
+- The SessionStart hook `session-resume.sh` is PROJECT-AGNOSTIC: it injects EVERY line matching `READ FIRST FOR <ANY-PROJECT>` that is not marked superseded → tagging the line IS the resume guarantee for ANY project (no per-project hook needed). Keep the hook even though MEMORY.md is auto-loaded: it adds the "read the handoff BEFORE working" instruction, works from any directory, and survives MEMORY.md growing past the 200-line load limit. It also warns when a project has two live pointers or a pointer to a missing file — fix those at wrap.
 
 **Rules carry forward.** Any new owner rule, standing guidance, working command or paid-for lesson goes into that project's always-loaded rules file the moment it is given, not only into a handoff. Rules file: `<MEM>/<proj>_rules.md`, force-loaded in full by session-resume.sh for every project listed in `<MEM>/session-wrap.conf`. Keep it short; replace rather than append. Check at wrap: anything the owner had to repeat this session must now be in it. Also rewrite `<MEM>/<proj>_now.md` (current state and next steps, kept short: hook context is cut at about 10,000 characters).
 
