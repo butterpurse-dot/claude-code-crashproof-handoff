@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Tests for hooks/session-resume.sh. Runs in a temp dir; touches nothing else.
+set -u
+HOOK="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/hooks/session-resume.sh"
+T="$(mktemp -d)"
+trap 'rm -rf "$T"' EXIT
+export SESSION_WRAP_MEM="$T/mem"
+M="$SESSION_WRAP_MEM"
+mkdir -p "$M" "$T/elsewhere" "$T/shop-repo"
+pass=0; fail=0
+
+check() { # name, haystack, needle, want(1=present,0=absent)
+  if printf '%s' "$2" | grep -qF -- "$3"; then got=1; else got=0; fi
+  if [ "$got" = "$4" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $1"; fi
+}
+run() { CLAUDE_PROJECT_DIR="$1" bash "$HOOK" "${@:2}"; }
+
+# 1. empty memory dir: silent, exit 0
+out="$(run "$T/elsewhere")"; rc=$?
+check "empty is silent" "x$out" "x" 1
+[ -z "$out" ] && [ "$rc" = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: empty output/exit ($rc)"; }
+
+# 2. --dir prints the memory dir; default is derived from HOME
+check "--dir honours override" "$(run "$T/elsewhere" --dir)" "$M" 1
+check "--dir default from HOME" "$(SESSION_WRAP_MEM= HOME=/home/u bash "$HOOK" --dir)" "/home/u/.claude/projects/-home-u/memory" 1
+
+# 3. pointers: live lines shown for every project, superseded hidden
+cat > "$M/MEMORY.md" <<'EOF'
+- [a](project_alpha_handoff_20260102.md) — ★READ FIRST FOR ALPHA (current)★ alpha state
+- [a-old](project_alpha_handoff_20260101.md) — READ FIRST FOR ALPHA (superseded)
+- [s](project_shop_handoff_20260102.md) — ★READ FIRST FOR SHOP (current)★ shop state
+- [note](some_note.md) — unrelated memory
+EOF
+echo ok > "$M/project_alpha_handoff_20260102.md"; echo ok > "$M/project_shop_handoff_20260102.md"
+out="$(run "$T/elsewhere")"
+check "header shown" "$out" "RESUME POINTERS" 1
+check "alpha pointer shown" "$out" "alpha state" 1
+check "shop pointer shown" "$out" "shop state" 1
+check "superseded hidden" "$out" "20260101" 0
+check "unrelated memory hidden" "$out" "some_note" 0
+check "no warnings when clean" "$out" "WARN" 0
+check "no heartbeat when clean" "$out" "UNWRAPPED" 0
+
+# 4. unwrapped heartbeat: flagged, even in a file MEMORY.md does not point to
+printf '## VERIFIED STATE\nx\n\n## LIVE STATE (heartbeat)\nnext: step 4\n' > "$M/project_beta_handoff_20260103.md"
+out="$(run "$T/elsewhere")"
+check "untagged heartbeat flagged" "$out" "UNWRAPPED HEARTBEAT" 1
+check "heartbeat file named" "$out" "project_beta_handoff_20260103.md" 1
+rm "$M/project_beta_handoff_20260103.md"
+
+# 5. a prose mention of the heading is not a heartbeat
+echo 'we removed the ## LIVE STATE (heartbeat) block' > "$M/project_alpha_handoff_20260102.md"
+check "prose mention not flagged" "$(run "$T/elsewhere")" "UNWRAPPED" 0
+
+# 6. heartbeat with no MEMORY.md at all
+mkdir -p "$T/mem2"; printf '## LIVE STATE (heartbeat)\nx\n' > "$T/mem2/project_new_handoff_20260103.md"
+check "heartbeat without index" "$(SESSION_WRAP_MEM="$T/mem2" run "$T/elsewhere")" "project_new_handoff_20260103.md" 1
+
+# 7. warnings: two live pointers for one project, pointer to a missing file
+echo '- [a2](project_alpha_handoff_20260104.md) — ★READ FIRST FOR ALPHA (current)★ newer' >> "$M/MEMORY.md"
+out="$(run "$T/elsewhere")"
+check "duplicate live pointer warned" "$out" "two live handoff pointers" 1
+check "duplicate names the project" "$out" "ALPHA" 1
+check "missing file warned" "$out" "missing file: project_alpha_handoff_20260104.md" 1
+sed -i '$d' "$M/MEMORY.md"
+
+# 8. force-load: rules + now + only that project's pointer
+printf 'RULE never deploy on Friday\n' > "$M/shop_rules.md"; printf 'NOW waiting on review\n' > "$M/shop_now.md"
+printf '# comment\n\nshop-repo | SHOP | shop_rules.md | shop_now.md\n' > "$M/session-wrap.conf"
+out="$(run "$T/shop-repo")"
+check "rules force-loaded" "$out" "RULE never deploy on Friday" 1
+check "now force-loaded" "$out" "NOW waiting on review" 1
+check "own pointer kept" "$out" "shop state" 1
+check "other pointers dropped" "$out" "alpha state" 0
+check "rules come first" "$(printf '%s' "$out" | head -n 1)" "RULE never deploy on Friday" 1
+out="$(run "$T/elsewhere")"
+check "no force-load elsewhere" "$out" "RULE never deploy on Friday" 0
+check "all pointers elsewhere" "$out" "alpha state" 1
+
+# 9. force-load matches a git worktree that lives outside the repo path
+if git -C "$T/shop-repo" init -q 2>/dev/null \
+   && git -C "$T/shop-repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init \
+   && git -C "$T/shop-repo" worktree add -q "$T/wt-feature" 2>/dev/null; then
+  check "worktree force-loads" "$(run "$T/wt-feature")" "RULE never deploy on Friday" 1
+else
+  echo "SKIP: git worktree test (git unavailable)"
+fi
+
+echo "passed $pass, failed $fail"
+[ "$fail" = 0 ]
