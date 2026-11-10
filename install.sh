@@ -1,39 +1,80 @@
 #!/usr/bin/env bash
-# Copies the skill and the hook into ~/.claude. Does not edit settings.json:
-# it prints the hook entry for you to add.
+# Copies the skill and the resume script into an agent's config dir.
+#   bash install.sh [claude|codex|opencode|generic]     (default: claude)
+# codex and generic put the skill in ~/.agents/skills, the shared location that
+# Codex, opencode and other SKILL.md-aware agents read.
+# It never edits a settings, hooks or AGENTS.md file: it prints what to add.
 set -euo pipefail
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+TARGET="${1:-claude}"
 
-mkdir -p "$CLAUDE_DIR/skills/session-wrap" "$CLAUDE_DIR/hooks"
-for pair in "skills/session-wrap/SKILL.md" "hooks/session-resume.sh"; do
-  dst="$CLAUDE_DIR/$pair"
-  if [ -e "$dst" ] && ! cmp -s "$SRC/$pair" "$dst"; then
-    cp "$dst" "$dst.bak"
-    echo "existing $dst saved as $dst.bak"
-  fi
-  cp "$SRC/$pair" "$dst"
-done
-chmod +x "$CLAUDE_DIR/hooks/session-resume.sh"
+case "$TARGET" in
+  claude)   DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}";  SKILL="$DIR/skills/session-wrap/SKILL.md" ;;
+  codex)    DIR="${CODEX_HOME:-$HOME/.codex}";          SKILL="$HOME/.agents/skills/session-wrap/SKILL.md" ;;
+  opencode) DIR="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
+            SKILL="$DIR/skills/session-wrap/SKILL.md" ;;
+  generic)  DIR="$HOME/.session-wrap";                  SKILL="$HOME/.agents/skills/session-wrap/SKILL.md" ;;
+  *) echo "usage: bash install.sh [claude|codex|opencode|generic]" >&2; exit 2 ;;
+esac
+HOOK="$DIR/hooks/session-resume.sh"
+[ "$TARGET" = generic ] && HOOK="$DIR/session-resume.sh"
 
-MEM="$(bash "$CLAUDE_DIR/hooks/session-resume.sh" --dir)"
+put() { # src dst — back up a different existing file, then copy
+  mkdir -p "$(dirname "$2")"
+  if [ -e "$2" ] && ! cmp -s "$1" "$2"; then cp "$2" "$2.bak"; echo "existing $2 saved as $2.bak"; fi
+  cp "$1" "$2"
+}
+put "$SRC/skills/session-wrap/SKILL.md" "$SKILL"
+put "$SRC/hooks/session-resume.sh" "$HOOK"
+chmod +x "$HOOK"
+
+MEM="$(bash "$HOOK" --dir)"
 mkdir -p "$MEM"
 [ -f "$MEM/MEMORY.md" ] || : > "$MEM/MEMORY.md"
 
-cat <<EOF
-Installed:
-  $CLAUDE_DIR/skills/session-wrap/SKILL.md
-  $CLAUDE_DIR/hooks/session-resume.sh
+cat <<EOF2
+Installed for $TARGET:
+  $SKILL
+  $HOOK
 Memory dir (handoffs, MEMORY.md index, rules files):
   $MEM
 
-Last step: add this to the "hooks" object in $CLAUDE_DIR/settings.json
+EOF2
+
+HOOK_JSON="  \"SessionStart\": [
+    { \"hooks\": [ { \"type\": \"command\", \"command\": \"bash $HOOK\" } ] }
+  ]"
+case "$TARGET" in
+  claude) cat <<EOF2
+Last step: add this to the "hooks" object in $DIR/settings.json
 (merge with any SessionStart entries you already have):
 
-  "SessionStart": [
-    { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/session-resume.sh" } ] }
-  ]
+$HOOK_JSON
+EOF2
+  ;;
+  codex) cat <<EOF2
+Last step: add this to the "hooks" object in $DIR/hooks.json
+(create the file as { "hooks": { ... } } if you have none). Codex asks you to
+trust a new hook the first time it runs.
+
+$HOOK_JSON
+EOF2
+  ;;
+  *) cat <<EOF2
+Last step: this agent has no session-start hook, so add these lines to its
+instructions file (AGENTS.md, or whatever your agent reads at start):
+
+  ## Session handoff
+  At the start of every session, run \`bash $HOOK\` and read what it prints
+  before doing anything else.
+  When I say "wrap up", "save context" or "prepare handoff", or the context is
+  nearly full, follow $SKILL exactly.
+  After each completed sub-task and before any risky step, write a heartbeat as
+  that file describes.
+EOF2
+  ;;
+esac
+cat <<EOF2
 
 Optional: copy examples/session-wrap.conf to $MEM/ to force-load a project's rules file.
-Then start a new session and run /session-wrap when you finish.
-EOF
+EOF2

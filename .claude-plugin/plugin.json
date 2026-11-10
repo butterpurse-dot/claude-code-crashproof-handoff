@@ -1,6 +1,6 @@
 {
   "name": "crashproof-handoff",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Session-wrap skill and SessionStart hook for people running several long-lived projects: dated handoff chain, one read-first pointer per project, mid-session heartbeats, and a warning when a session ended without wrapping.",
   "author": {
     "name": "butterpurse-dot",

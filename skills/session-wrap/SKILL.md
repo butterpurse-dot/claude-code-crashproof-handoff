@@ -5,7 +5,7 @@ description: Project-aware end-of-session closeout — refresh the read-first ha
 
 # Session Wrap (project-aware closeout)
 
-Two parts: §1 is universal; §2 routes by project (state tables are per-project — never write one project's tables for another). §0 = mid-session heartbeat (below). `<MEM>` = the memory dir printed by `echo "${SESSION_WRAP_MEM:-$HOME/.claude/projects/$(printf %s "$HOME" | tr / -)/memory}"`.
+Two parts: §1 is universal; §2 routes by project (state tables are per-project — never write one project's tables for another). §0 = mid-session heartbeat (below). `<MEM>` = the memory dir printed by `echo "${SESSION_WRAP_MEM:-$([ -d ~/.claude ] && echo ~/.claude/projects/$(printf %s "$HOME" | tr / -)/memory || echo ~/.session-wrap/memory)}"`.
 
 **Redact before ANY save** (heartbeat, handoff memory, rules/now files, DB rows, resume prompt): strip API keys, tokens, passwords, private keys, account numbers and balances, personal data, anything identifying live accounts. Write `<REDACTED — see vault>` or paraphrase ("live balance verified, not recorded here"). Naming WHERE the real value lives is fine; the value is not. Same pattern as the guardrail paraphrase rule in §2 — keep both.
 

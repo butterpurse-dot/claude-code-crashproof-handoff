@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-resume.sh\"",
+            "command": "R=\"${extensionPath}\"; bash \"${CLAUDE_PLUGIN_ROOT:-$R}/hooks/session-resume.sh\" --json",
             "timeout": 10
           }
         ]

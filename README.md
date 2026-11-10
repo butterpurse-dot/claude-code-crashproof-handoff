@@ -1,8 +1,24 @@
 # crashproof-handoff
 
-**A Claude Code session-wrap skill and SessionStart hook, taken from a setup that runs several long-lived projects at once.**
+**A session-wrap skill and session-start hook for AI coding agents, taken from a setup that runs several long-lived projects at once.** Built on Claude Code; also installs on Gemini CLI, Codex CLI, opencode, and any agent that reads an `AGENTS.md`.
 
 This is not a "summarise the chat into a file" skill. It is a closeout routine with a resume guarantee, built up over months of use across several projects, with the lessons that cost real sessions left in.
+
+## Works with
+
+The skill is one `SKILL.md`; the resume step is one bash script. Each agent gets the thinnest wrapper it supports.
+
+| Agent | Install | Resume at session start | What was tested |
+|---|---|---|---|
+| Claude Code | plugin, or `install.sh` | hook | Live on 2.1: hook fired, skill listed |
+| Gemini CLI | extension | hook | 0.67: extension validates and links, skill listed. Hook command covered by tests, not run in a live session |
+| Codex CLI | `install.sh codex` | hook (you approve it once) | 0.158: skill discovered. Hook not run in a live session |
+| opencode | `install.sh opencode` | instruction in `AGENTS.md` | Live on 2.2 with a DeepSeek model, using project-level files: it ran the resume script, read the pointers, and listed the skill |
+| Anything else | `install.sh generic` | instruction in `AGENTS.md` | Not tested |
+
+Where an agent has no session-start hook, the resume step is an instruction the model has to follow, which is weaker than a hook.
+
+If Claude Code is on the machine, every agent shares its memory dir, so a handoff written in one agent is picked up in another.
 
 ## What is different
 
@@ -47,44 +63,51 @@ These are in `SKILL.md` because each one cost a session:
 
 ## Install
 
-### As a plugin
+Use one method per agent, or the resume step runs twice.
 
-Inside Claude Code:
+### Claude Code
 
 ```
 /plugin marketplace add butterpurse-dot/claude-code-crashproof-handoff
 /plugin install crashproof-handoff@crashproof-handoff
 ```
 
-The plugin registers the hook for you; there is no settings edit. The skill is then named `/crashproof-handoff:session-wrap`.
+The plugin registers the hook; there is no settings edit. The skill is then `/crashproof-handoff:session-wrap`.
 
-### By hand
+### Gemini CLI
+
+```bash
+gemini extensions install https://github.com/butterpurse-dot/claude-code-crashproof-handoff
+```
+
+The extension carries the skill and the hook.
+
+### Codex CLI, opencode, anything else
 
 ```bash
 git clone https://github.com/butterpurse-dot/claude-code-crashproof-handoff.git
 ```
 
 ```bash
-bash claude-code-crashproof-handoff/install.sh
+bash claude-code-crashproof-handoff/install.sh codex
 ```
 
-The installer copies two files into `~/.claude` (backing up any it would overwrite), creates the memory dir, and prints one hook entry for you to add to `~/.claude/settings.json`:
+Replace `codex` with `opencode`, `generic`, or `claude` (a hand install for Claude Code, for when you want to edit the skill).
 
-```json
-"SessionStart": [
-  { "hooks": [ { "type": "command", "command": "bash ~/.claude/hooks/session-resume.sh" } ] }
-]
-```
+The installer copies two files (backing up any it would overwrite), creates the memory dir, and prints the one thing left to add:
 
-It does not edit your settings for you. Use one install method, not both, or the hook runs twice.
+- **claude, codex:** a `SessionStart` hook entry for `settings.json` or `~/.codex/hooks.json`.
+- **opencode, generic:** four lines for your `AGENTS.md` that tell the agent to run the resume script at the start of each session.
+
+It never edits a settings or instructions file for you. `codex` and `generic` put the skill in `~/.agents/skills`, the shared folder that Codex, opencode and Gemini CLI all read.
 
 ## Use
 
-- **End of session:** `/session-wrap` (plugin install: `/crashproof-handoff:session-wrap`), or "wrap up", "save context", "prepare handoff".
-- **During the session:** the skill tells Claude when to write a heartbeat. Say "checkpoint" to force one.
-- **Next session:** nothing. The hook prints the pointers.
+- **End of session:** say "wrap up", "save context" or "prepare handoff", or call the skill by name (`/session-wrap`; Claude plugin: `/crashproof-handoff:session-wrap`).
+- **During the session:** the skill tells the agent when to write a heartbeat. Say "checkpoint" to force one.
+- **Next session:** nothing. The hook, or the `AGENTS.md` instruction, prints the pointers.
 
-To make heartbeats start from the first message, add one line to your `CLAUDE.md`:
+To make heartbeats start from the first message, add one line to your `CLAUDE.md`, `GEMINI.md` or `AGENTS.md`:
 
 ```
 After each completed sub-task and before any risky step, write a heartbeat as described in the session-wrap skill.
@@ -100,7 +123,7 @@ The skill is meant to be edited. Three places:
 
 ## How it is laid out
 
-- Memory dir: `~/.claude/projects/<your-home-as-a-slug>/memory/`. Print it with `echo "${SESSION_WRAP_MEM:-$HOME/.claude/projects/$(printf %s "$HOME" | tr / -)/memory}"`; override with `SESSION_WRAP_MEM`.
+- Memory dir: `~/.claude/projects/<your-home-as-a-slug>/memory/` when `~/.claude` exists, otherwise `~/.session-wrap/memory/`. Print it with `echo "${SESSION_WRAP_MEM:-$([ -d ~/.claude ] && echo ~/.claude/projects/$(printf %s "$HOME" | tr / -)/memory || echo ~/.session-wrap/memory)}"`; override with `SESSION_WRAP_MEM`.
 - `MEMORY.md` there is the index. `project_<proj>_handoff_<YYYYMMDD>.md` are the handoffs. `<proj>_rules.md` and `<proj>_now.md` are the always-loaded files.
 - One memory dir for all projects is deliberate: the pointers reach you whichever directory you start in.
 - The hook needs bash, git, grep and sed. No jq, no Python, no network.
@@ -109,19 +132,22 @@ The skill is meant to be edited. Three places:
 
 - **Heartbeats and the gate depend on the model following the skill.** The hook is plain code with tests; the skill is instructions.
 - **Redaction is an instruction, not a scanner.** Check a handoff before you paste it anywhere public.
-- **Tested:** the hook (`bash tests/test.sh`, 30 checks), the installer, the example tables with the skill's `INSERT`s on PostgreSQL 16, and the plugin loaded from a local folder on Claude Code 2.1 (manifest validates, hook fires, skill is listed).
-- **Mileage:** the pointer chain, hook, rules files and state-store routing have months of use. The heartbeat, crash detection, reconciliation gate, redaction rule, tagging checks and plugin packaging are new.
+- **Tested:** the hook (`bash tests/test.sh`, 37 checks), the installer for all four targets, the example tables with the skill's `INSERT`s on PostgreSQL 16, and each agent as listed under "Works with".
+- **Written for Claude Code first.** A few lines in the skill describe Claude behaviour (`MEMORY.md` auto-loading and its 200-line limit). They are harmless elsewhere.
+- **Weaker models follow the heartbeat and the gate less reliably.** Not measured.
+- **Mileage:** the pointer chain, hook, rules files and state-store routing have months of use. The heartbeat, crash detection, reconciliation gate, redaction rule, tagging checks, plugin packaging and the non-Claude installs are new.
 
 ## Files
 
 ```
 skills/session-wrap/SKILL.md     the skill
 hooks/session-resume.sh          the SessionStart hook
-hooks/hooks.json                 registers the hook when installed as a plugin
-.claude-plugin/                  plugin and marketplace manifests
+hooks/hooks.json                 registers the hook for the Claude plugin and the Gemini extension
+.claude-plugin/                  Claude Code plugin and marketplace manifests
+gemini-extension.json            Gemini CLI extension manifest
 examples/session-wrap.conf       force-load config for rules files
 examples/state-store.sql         example Postgres state store
-install.sh                       copies skill and hook into ~/.claude
+install.sh                       copies skill and hook for claude, codex, opencode or generic
 tests/test.sh                    hook tests
 demo.sh                          prints what the hook shows after a clean wrap and after a killed session
 ```

@@ -1,0 +1,5 @@
+{
+  "name": "crashproof-handoff",
+  "version": "1.2.0",
+  "description": "Session-wrap skill and SessionStart resume hook: dated handoff chain, one read-first pointer per project, mid-session heartbeats, crash detection."
+}

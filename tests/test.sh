@@ -22,7 +22,9 @@ check "empty is silent" "x$out" "x" 1
 
 # 2. --dir prints the memory dir; default is derived from HOME
 check "--dir honours override" "$(run "$T/elsewhere" --dir)" "$M" 1
-check "--dir default from HOME" "$(SESSION_WRAP_MEM= HOME=/home/u bash "$HOOK" --dir)" "/home/u/.claude/projects/-home-u/memory" 1
+mkdir -p "$T/hc/.claude" "$T/hn"
+check "--dir default with ~/.claude" "$(SESSION_WRAP_MEM= HOME="$T/hc" bash "$HOOK" --dir)" "$T/hc/.claude/projects/$(printf %s "$T/hc" | tr / -)/memory" 1
+check "--dir default without ~/.claude" "$(SESSION_WRAP_MEM= HOME="$T/hn" bash "$HOOK" --dir)" "$T/hn/.session-wrap/memory" 1
 
 # 3. pointers: live lines shown for every project, superseded hidden
 cat > "$M/MEMORY.md" <<'EOF'
@@ -92,10 +94,22 @@ cmd="$(sed -n 's/.*"command": "\(.*\)",$/\1/p' "$ROOT/hooks/hooks.json" | sed 's
 check "plugin hook command found" "$cmd" 'CLAUDE_PLUGIN_ROOT' 1
 check "plugin hook command runs" "$(CLAUDE_PROJECT_DIR="$T/elsewhere" CLAUDE_PLUGIN_ROOT="$ROOT" bash -c "$cmd")" "alpha state" 1
 
+# 10b. Gemini CLI substitutes ${extensionPath} as text and sets no CLAUDE_PLUGIN_ROOT
+gcmd="${cmd//\$\{extensionPath\}/$ROOT}"
+gout="$(env -u CLAUDE_PLUGIN_ROOT CLAUDE_PROJECT_DIR="$T/elsewhere" bash -c "$gcmd")"
+check "gemini-style command runs" "$gout" "alpha state" 1
+check "--json wraps as hook JSON" "$gout" '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"' 1
+check "--json is one line" "$(printf '%s\n' "$gout" | wc -l | tr -d ' ')" "1" 1
+[ -z "$(SESSION_WRAP_MEM="$T/none" bash "$HOOK" --json)" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: --json silent when empty"; }
+
 # 11. the memory-dir one-liner in the skill agrees with the hook
-check "skill names the hook's memory dir" "$(grep -c 'tr / -)/memory}' "$ROOT/skills/session-wrap/SKILL.md")" "1" 1
-skilldir="$(SESSION_WRAP_MEM= HOME=/home/u bash -c 'echo "${SESSION_WRAP_MEM:-$HOME/.claude/projects/$(printf %s "$HOME" | tr / -)/memory}"')"
-check "one-liner equals --dir" "$(SESSION_WRAP_MEM= HOME=/home/u bash "$HOOK" --dir)" "$skilldir" 1
+oneliner="$(grep -o 'echo "${SESSION_WRAP_MEM:-[^`]*' "$ROOT/skills/session-wrap/SKILL.md")"
+check "skill carries the memory-dir one-liner" "$oneliner" "session-wrap/memory" 1
+for h in "$T/hc" "$T/hn"; do
+  [ "$(SESSION_WRAP_MEM= HOME="$h" bash -c "$oneliner")" = "$(SESSION_WRAP_MEM= HOME="$h" bash "$HOOK" --dir)" ] \
+    && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: one-liner equals --dir ($h)"; }
+done
+[ "$(SESSION_WRAP_MEM=/x/y bash -c "$oneliner")" = "/x/y" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: one-liner honours override"; }
 
 echo "passed $pass, failed $fail"
 [ "$fail" = 0 ]

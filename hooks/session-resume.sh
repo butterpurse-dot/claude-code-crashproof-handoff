@@ -13,11 +13,20 @@
 #      and now file in full, ahead of everything else.
 #
 #   session-resume.sh --dir    print the memory dir and exit
+#   session-resume.sh --json   same output wrapped as SessionStart hook JSON
+#                              (required by Gemini CLI; also read by Claude Code and Codex)
 #
 # Config: SESSION_WRAP_MEM overrides the memory dir. Needs bash, git, grep, sed.
+# Works as a SessionStart hook (Claude Code, Codex) or run by hand / by an
+# AGENTS.md instruction in any other agent.
 set -u
 
-MEM="${SESSION_WRAP_MEM:-$HOME/.claude/projects/$(printf %s "$HOME" | tr / -)/memory}"
+# Memory dir: SESSION_WRAP_MEM if set; Claude Code's home-project memory when
+# ~/.claude exists (so every agent on the machine shares one set of handoffs);
+# otherwise ~/.session-wrap/memory.
+if [ -n "${SESSION_WRAP_MEM:-}" ]; then MEM="$SESSION_WRAP_MEM"
+elif [ -d "$HOME/.claude" ]; then MEM="$HOME/.claude/projects/$(printf %s "$HOME" | tr / -)/memory"
+else MEM="$HOME/.session-wrap/memory"; fi
 if [ "${1:-}" = "--dir" ]; then printf '%s\n' "$MEM"; exit 0; fi
 MARK='## LIVE STATE (heartbeat)'
 
@@ -66,11 +75,22 @@ fi
 
 [ -z "$LINES" ] && [ -z "$HB" ] && [ -z "$FORCED" ] && exit 0
 
-if [ -n "$FORCED" ]; then
-  printf '%s\n' "$FORCED"
-elif [ -n "$LINES" ]; then
-  printf 'RESUME POINTERS (read the matching handoff BEFORE working on that project; memory dir %s/):\n%s\n' "$MEM" "$LINES"
+out() {
+  if [ -n "$FORCED" ]; then
+    printf '%s\n' "$FORCED"
+  elif [ -n "$LINES" ]; then
+    printf 'RESUME POINTERS (read the matching handoff BEFORE working on that project; memory dir %s/):\n%s\n' "$MEM" "$LINES"
+  fi
+  [ -n "$HB" ] && echo "UNWRAPPED HEARTBEAT (a session ended without /session-wrap; read the LIVE STATE block in):$HB"
+  [ -n "$WARN" ] && printf '%s' "$WARN"
+  return 0
+}
+
+if [ "${1:-}" = "--json" ]; then
+  j="$(out | tr -d '\000-\010\013\014\016-\037')"
+  j="${j//\\/\\\\}"; j="${j//\"/\\\"}"; j="${j//$'\t'/\\t}"; j="${j//$'\r'/}"; j="${j//$'\n'/\\n}"
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$j"
+else
+  out
 fi
-[ -n "$HB" ] && echo "UNWRAPPED HEARTBEAT (a session ended without /session-wrap; read the LIVE STATE block in):$HB"
-[ -n "$WARN" ] && printf '%s' "$WARN"
 exit 0
