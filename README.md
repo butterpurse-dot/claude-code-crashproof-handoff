@@ -17,8 +17,8 @@ The skill is one `SKILL.md`; the resume step is one bash script. Each agent gets
 | DeepSeek Harness (DSH) | `install.sh dsh` | instruction in `~/.dsh/AGENTS.md` | Live on 0.2.1, headless profile: ran the resume script, read the pointers, listed the skill |
 | Kilo Code (VS Code and CLI) | `install.sh kilo` | instruction in `~/.config/kilo/AGENTS.md` | 7.8: skill listed. Instruction not run in a live session |
 | GitHub Copilot Chat in VS Code | `install.sh generic` | instruction in `~/.copilot/instructions/*.instructions.md` | Paths confirmed in VS Code 1.145; not run live. Needs agent mode to run the script |
-| Continue (VS Code) | `install.sh generic` | rule in `~/.continue/rules/` | Not tested |
-| Anything else | `install.sh generic` | instruction in `AGENTS.md` | Not tested |
+| Continue (VS Code) | `install.sh generic` | rule in `~/.continue/rules/` | Install paths covered by tests; not run live |
+| Anything else | `install.sh generic` | instruction in `AGENTS.md` | Install paths and the installed resume script covered by tests; not run live |
 
 The Claude Code extension for VS Code uses the same install as Claude Code.
 
