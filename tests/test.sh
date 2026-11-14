@@ -111,5 +111,43 @@ for h in "$T/hc" "$T/hn"; do
 done
 [ "$(SESSION_WRAP_MEM=/x/y bash -c "$oneliner")" = "/x/y" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: one-liner honours override"; }
 
+# 12. install.sh: every target puts the skill and hook where its agent reads them, in a scratch HOME
+inst() { # home, target
+  env -u CLAUDE_CONFIG_DIR -u CODEX_HOME -u OPENCODE_CONFIG_DIR -u XDG_CONFIG_HOME -u DSH_HOME -u SESSION_WRAP_MEM \
+    HOME="$1" bash "$ROOT/install.sh" "$2"
+}
+for spec in "claude|.claude/skills|.claude/hooks/session-resume.sh" \
+            "codex|.agents/skills|.codex/hooks/session-resume.sh" \
+            "opencode|.config/opencode/skills|.config/opencode/hooks/session-resume.sh" \
+            "dsh|.dsh/skills|.dsh/hooks/session-resume.sh" \
+            "kilo|.kilo/skills|.config/kilo/hooks/session-resume.sh" \
+            "generic|.agents/skills|.session-wrap/session-resume.sh"; do
+  IFS='|' read -r tgt sk hk <<< "$spec"
+  H="$T/inst-$tgt"; mkdir -p "$H"
+  out="$(inst "$H" "$tgt")"; rc=$?
+  [ "$rc" = 0 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install $tgt exit $rc"; }
+  cmp -s "$ROOT/skills/session-wrap/SKILL.md" "$H/$sk/session-wrap/SKILL.md" && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install $tgt skill at $sk"; }
+  [ -x "$H/$hk" ] && cmp -s "$HOOK" "$H/$hk" && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install $tgt hook at $hk"; }
+  mem="$(env -u SESSION_WRAP_MEM HOME="$H" bash "$H/$hk" --dir)"
+  [ -f "$mem/MEMORY.md" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: install $tgt MEMORY.md in $mem"; }
+  check "install $tgt names the hook" "$out" "$H/$hk" 1
+done
+# the installed generic hook works end to end from its own location
+H="$T/inst-generic"; mem="$(env -u SESSION_WRAP_MEM HOME="$H" bash "$H/.session-wrap/session-resume.sh" --dir)"
+mem="${mem:-$T/inst-nomem}"; mkdir -p "$mem"  # never write outside the temp dir if the hook is missing
+echo '- [g](project_gen_handoff_20260105.md) — ★READ FIRST FOR GEN (current)★ gen state' > "$mem/MEMORY.md"
+echo ok > "$mem/project_gen_handoff_20260105.md"
+check "installed generic hook prints pointers" "$(env -u SESSION_WRAP_MEM HOME="$H" bash "$H/.session-wrap/session-resume.sh")" "gen state" 1
+check "generic prints the AGENTS.md step" "$(inst "$H" generic)" "## Session handoff" 1
+check "reinstall keeps the index" "$(cat "$mem/MEMORY.md")" "gen state" 1
+# a changed copy is backed up, an identical one is not
+[ ! -e "$H/.agents/skills/session-wrap/SKILL.md.bak" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: identical reinstall made a .bak"; }
+echo "local edit" >> "$H/.agents/skills/session-wrap/SKILL.md"
+inst "$H" generic >/dev/null
+check "changed skill backed up" "$(cat "$H/.agents/skills/session-wrap/SKILL.md.bak" 2>/dev/null)" "local edit" 1
+cmp -s "$ROOT/skills/session-wrap/SKILL.md" "$H/.agents/skills/session-wrap/SKILL.md" && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: reinstall restores the skill"; }
+inst "$T/inst-bad" nosuch >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: unknown target exit $rc"; }
+
 echo "passed $pass, failed $fail"
 [ "$fail" = 0 ]
